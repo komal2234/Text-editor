@@ -3,35 +3,65 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Advanced Text Editor (DSA Features)</title>
+  <title>Advanced Text Editor (Trie • Stacks • DLL)</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <div class="container">
-    <header>
-      <h1>Text Editor — Trie · Undo/Redo · Doubly Linked List</h1>
-      <div class="controls">
-        <button id="undoBtn">Undo</button>
-        <button id="redoBtn">Redo</button>
-        <button id="saveBtn">Download .txt</button>
+<body class="light">
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">✍️</span>
+        <h1>Text Editor</h1>
+        <span class="pill">Trie</span>
+        <span class="pill">Undo/Redo</span>
+        <span class="pill">DLL</span>
+      </div>
+      <div class="actions">
+        <button id="undoBtn" title="Undo (Ctrl+Z)">⟲ Undo</button>
+        <button id="redoBtn" title="Redo (Ctrl+Y)">⟳ Redo</button>
+        <button id="findToggle" title="Find & Replace (Ctrl+F)">🔎 Find</button>
+        <button id="saveBtn" title="Download .txt">⬇️ Download</button>
+        <button id="printBtn" title="Print / Save as PDF">🖨️ Print</button>
+        <button id="clearBtn" title="Clear document">🧹 Clear</button>
+        <button id="themeBtn" title="Toggle theme">🌙/☀️</button>
       </div>
     </header>
 
-    <main>
-      <!-- editor area (we render lines here) -->
-      <div id="editor" class="editor" tabindex="0" aria-label="Custom text editor"></div>
-
-      <!-- suggestion box for autocomplete -->
-      <div id="suggestions" class="suggestions hidden"></div>
-
-      <!-- status / instructions -->
-      <div class="info">
-        <small>Type to insert. Use ← ↑ → ↓ to move. Enter to add line. Backspace to delete. Click editor to focus.</small>
+    <!-- Find & Replace panel -->
+    <section id="findPanel" class="find-panel hidden">
+      <div class="field">
+        <label for="findInput">Find</label>
+        <input id="findInput" type="text" placeholder="text to find">
       </div>
+      <div class="field">
+        <label for="replaceInput">Replace</label>
+        <input id="replaceInput" type="text" placeholder="replace with">
+      </div>
+      <div class="find-actions">
+        <button id="findNextBtn">Find Next</button>
+        <button id="replaceBtn">Replace</button>
+        <button id="replaceAllBtn">Replace All</button>
+      </div>
+    </section>
+
+    <!-- Editor area: gutter (line numbers) + content -->
+    <main class="editor-wrap">
+      <div id="gutter" class="gutter"></div>
+      <div id="editor" class="editor" tabindex="0" aria-label="Custom text editor"></div>
+      <!-- suggestions dropdown -->
+      <div id="suggestions" class="suggestions hidden" role="listbox"></div>
     </main>
 
-    <footer>
-      <small>Course Project — implemented: Trie autocomplete / spell suggestions, stacks for undo/redo, doubly linked list for lines & cursor navigation.</small>
+    <footer class="statusbar">
+      <div class="left">
+        <span id="pos">Ln 1, Col 1</span>
+      </div>
+      <div class="right">
+        <span id="wc">Words: 0</span>
+        <span id="cc">Chars: 0</span>
+        <span class="sep">•</span>
+        <span id="autosave">Autosaved</span>
+      </div>
     </footer>
   </div>
 

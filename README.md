@@ -1,4 +1,4 @@
-##Text Editor (with DSA Features)
+# Text Editor (with DSA Features)
 
 ## Project Overview
 This is a **responsive web-based text editor** built using **HTML, CSS, and JavaScript**.  

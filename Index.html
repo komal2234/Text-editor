@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Advanced Text Editor (DSA Features)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Text Editor — Trie · Undo/Redo · Doubly Linked List</h1>
+      <div class="controls">
+        <button id="undoBtn">Undo</button>
+        <button id="redoBtn">Redo</button>
+        <button id="saveBtn">Download .txt</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- editor area (we render lines here) -->
+      <div id="editor" class="editor" tabindex="0" aria-label="Custom text editor"></div>
+
+      <!-- suggestion box for autocomplete -->
+      <div id="suggestions" class="suggestions hidden"></div>
+
+      <!-- status / instructions -->
+      <div class="info">
+        <small>Type to insert. Use ← ↑ → ↓ to move. Enter to add line. Backspace to delete. Click editor to focus.</small>
+      </div>
+    </main>
+
+    <footer>
+      <small>Course Project — implemented: Trie autocomplete / spell suggestions, stacks for undo/redo, doubly linked list for lines & cursor navigation.</small>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

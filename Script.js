@@ -1,576 +1,514 @@
-/* Advanced Text Editor JS
- - Doubly linked list for lines (LineNode, LinkedList)
- - Undo/Redo with stacks (push operation objects)
- - Trie for suggestions/spell-check
- - Rendering: we re-render entire content from linked list to HTML (highlight misspellings)
- - Keyboard handling: printable chars, Enter, Backspace, Arrow keys
+/* Advanced Text Editor
+   - Doubly Linked List document model (LineNode, LineList)
+   - Undo/Redo stacks with operation objects
+   - Trie: autocomplete + spell-check underline
+   - Line numbers, counts, dark/light, find/replace, autosave, download/print
 */
 
-/* -----------------------
-   Simple dictionary (for demo)
-   In real project, replace with larger list or load external file
-------------------------*/
+/* ------------------------------
+   Mini dictionary for demo (extend as needed)
+--------------------------------*/
 const DICTIONARY = [
   "the","this","that","text","editor","autocomplete","undo","redo","javascript","function",
   "line","insert","delete","cursor","stack","trie","node","data","structure","project",
   "code","compile","run","hello","world","example","typing","suggest","suggestion","professor",
-  "nagar","komal","bank","loan","model","personal","appointment"
+  "komal","bank","loan","model","personal","appointment","list","replace","find","print","download",
+  "count","words","characters","dark","light","theme","save","local","storage","linked","double",
+  "doubly","class","split","join","enter","backspace","arrow","up","down","left","right"
 ];
 
-/* -----------------------
-   Trie Implementation
-------------------------*/
-class TrieNode {
-  constructor() {
-    this.children = Object.create(null);
-    this.isEnd = false;
-  }
-}
+/* ------------------------------
+   Trie
+--------------------------------*/
+class TrieNode { constructor(){ this.children=Object.create(null); this.isEnd=false; } }
 class Trie {
-  constructor() { this.root = new TrieNode(); }
-  insert(word){
-    let n = this.root;
-    for (const ch of word.toLowerCase()){
-      if (!n.children[ch]) n.children[ch] = new TrieNode();
-      n = n.children[ch];
-    }
-    n.isEnd = true;
-  }
-  _collect(node, prefix, arr){
-    if (!node) return;
-    if (node.isEnd) arr.push(prefix);
-    for (const k of Object.keys(node.children)) this._collect(node.children[k], prefix + k, arr);
-  }
+  constructor(){ this.root=new TrieNode(); }
+  insert(word){ let n=this.root; for(const ch of word.toLowerCase()){ if(!n.children[ch]) n.children[ch]=new TrieNode(); n=n.children[ch]; } n.isEnd=true; }
+  contains(word){ let n=this.root; for(const ch of word.toLowerCase()){ if(!n.children[ch]) return false; n=n.children[ch]; } return n.isEnd; }
+  _collect(node, pref, out){ if(!node) return; if(node.isEnd) out.push(pref); for(const k of Object.keys(node.children)) this._collect(node.children[k], pref+k, out); }
   autocomplete(prefix, limit=8){
-    let n = this.root;
-    for (const ch of prefix.toLowerCase()){
-      if (!n.children[ch]) return [];
-      n = n.children[ch];
-    }
-    const results = [];
-    this._collect(n, prefix.toLowerCase(), results);
-    return results.slice(0, limit);
-  }
-  contains(word){
-    let n = this.root;
-    for (const ch of word.toLowerCase()){
-      if (!n.children[ch]) return false;
-      n = n.children[ch];
-    }
-    return n.isEnd;
+    let n=this.root; for(const ch of prefix.toLowerCase()){ if(!n.children[ch]) return []; n=n.children[ch]; }
+    const res=[]; this._collect(n, prefix.toLowerCase(), res); return res.slice(0,limit);
   }
 }
+const trie = new Trie(); DICTIONARY.forEach(w=>trie.insert(w));
 
-/* -----------------------
-   Doubly linked list for lines
-------------------------*/
-class LineNode {
-  constructor(text=""){
-    this.text = text;
-    this.next = null;
-    this.prev = null;
-  }
-}
+/* ------------------------------
+   Doubly Linked List for lines
+--------------------------------*/
+class LineNode { constructor(text=""){ this.text=text; this.prev=null; this.next=null; } }
 class LineList {
   constructor(){
     this.head = new LineNode("");
-    this.tail = this.head;
-    this.size = 1;
+    this.tail = this.head; this.size = 1;
   }
   insertAfter(node, newNode){
-    newNode.prev = node;
-    newNode.next = node.next;
-    if (node.next) node.next.prev = newNode;
-    node.next = newNode;
-    if (this.tail === node) this.tail = newNode;
-    this.size++;
-  }
-  insertAtEnd(node){
-    this.tail.next = node;
-    node.prev = this.tail;
-    this.tail = node;
+    newNode.prev=node; newNode.next=node.next;
+    if(node.next) node.next.prev=newNode;
+    node.next=newNode;
+    if(this.tail===node) this.tail=newNode;
     this.size++;
   }
   deleteNode(node){
-    if (!node) return;
-    if (node.prev) node.prev.next = node.next;
-    if (node.next) node.next.prev = node.prev;
-    if (node === this.head) this.head = node.next || new LineNode("");
-    if (node === this.tail && node.prev) this.tail = node.prev;
-    this.size = Math.max(1, this.size - 1);
+    if(!node) return;
+    if(node.prev) node.prev.next=node.next;
+    if(node.next) node.next.prev=node.prev;
+    if(node===this.head) this.head=node.next || new LineNode("");
+    if(node===this.tail && node.prev) this.tail=node.prev;
+    this.size=Math.max(1, this.size-1);
   }
-  toArray(){
-    const arr = [];
-    let n = this.head;
-    while (n){
-      arr.push(n.text);
-      n = n.next;
-    }
-    return arr;
-  }
+  toArray(){ const arr=[]; let n=this.head; while(n){ arr.push(n.text); n=n.next; } return arr; }
 }
 
-/* -----------------------
-   Editor State & Undo/Redo
-------------------------*/
-const editorEl = document.getElementById("editor");
+/* ------------------------------
+   DOM refs
+--------------------------------*/
+const bodyEl        = document.body;
+const editorEl      = document.getElementById("editor");
+const gutterEl      = document.getElementById("gutter");
 const suggestionsEl = document.getElementById("suggestions");
-const undoBtn = document.getElementById("undoBtn");
-const redoBtn = document.getElementById("redoBtn");
-const saveBtn = document.getElementById("saveBtn");
 
-const trie = new Trie();
-DICTIONARY.forEach(w => trie.insert(w));
+const undoBtn   = document.getElementById("undoBtn");
+const redoBtn   = document.getElementById("redoBtn");
+const saveBtn   = document.getElementById("saveBtn");
+const printBtn  = document.getElementById("printBtn");
+const clearBtn  = document.getElementById("clearBtn");
+const themeBtn  = document.getElementById("themeBtn");
 
-let lines = new LineList();               // doubly linked list of lines
-let curNode = lines.head;                 // current line node where cursor stands
-let cursorIndex = 0;                      // index inside curNode.text (caret position)
-let undoStack = [];                       // push operation objects {type, payload}
-let redoStack = [];                       // for redo
+const findToggle    = document.getElementById("findToggle");
+const findPanel     = document.getElementById("findPanel");
+const findInput     = document.getElementById("findInput");
+const replaceInput  = document.getElementById("replaceInput");
+const findNextBtn   = document.getElementById("findNextBtn");
+const replaceBtn    = document.getElementById("replaceBtn");
+const replaceAllBtn = document.getElementById("replaceAllBtn");
 
-/* push current snapshot op - used for simple undo (we store small diffs instead of full snapshots) */
-function pushUndo(op){
-  undoStack.push(op);
-  redoStack = []; // clear redo on new edit
-  updateButtons();
-}
+const posEl = document.getElementById("pos");
+const wcEl  = document.getElementById("wc");
+const ccEl  = document.getElementById("cc");
+const autosaveEl = document.getElementById("autosave");
+
+/* ------------------------------
+   Editor state
+--------------------------------*/
+let lines = new LineList();
+let curNode = lines.head;
+let cursorIndex = 0;
+
+let undoStack = [];
+let redoStack = [];
+
+const STORAGE_KEY = "te_text_v2";
+let findIndexCache = null; // for find-next line/col tracking
+
+/* ------------------------------
+   Utilities
+--------------------------------*/
+const escapeHtml = (s)=> s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const splitTokens = (s)=> s.match(/(\w+|[^\w]+)/g) || [""];
+
+/* ------------------------------
+   Undo/Redo push & buttons
+--------------------------------*/
+function pushUndo(op){ undoStack.push(op); redoStack=[]; updateButtons(); }
 function updateButtons(){
-  undoBtn.disabled = undoStack.length === 0;
-  redoBtn.disabled = redoStack.length === 0;
+  undoBtn.disabled = undoStack.length===0;
+  redoBtn.disabled = redoStack.length===0;
 }
 
-/* -----------------------
-   Render: build HTML from lines
-   - highlight misspelled words with .miss
-   - insert caret span at position
-------------------------*/
+/* ------------------------------
+   Render gutter + content + caret + counters
+--------------------------------*/
 function render(){
-  // build DOM
-  let html = "";
-  let n = lines.head;
-  while (n){
-    // split words to allow miss highlight
-    const words = splitWordsPreserve(n.text);
-    const parts = [];
-    for (const w of words){
-      if (/\w+/.test(w) && !trie.contains(w)) {
-        parts.push(`<span class="miss">${escapeHtml(w)}</span>`);
-      } else {
-        parts.push(escapeHtml(w));
-      }
-    }
-    const lineHtml = parts.join("");
-    // mark line container; we will insert caret when we find curNode
-    html += `<div class="line" data-line-id="${lineId(n)}">${lineHtml}</div>`;
+  // Build gutter
+  let ghtml = "";
+  let n = lines.head, i = 1;
+  while(n){ ghtml += `<div class="ln">${i}</div>`; n=n.next; i++; }
+  gutterEl.innerHTML = ghtml;
+
+  // Build content (with misspell underlines)
+  let chtml = "";
+  n = lines.head;
+  while(n){
+    const tokens = splitTokens(n.text).map(tok => {
+      if (/\w+/.test(tok) && !trie.contains(tok)) return `<span class="miss">${escapeHtml(tok)}</span>`;
+      return escapeHtml(tok);
+    });
+    chtml += `<div class="line" data-id="${lineId(n)}">${tokens.join("")}</div>`;
     n = n.next;
   }
-  editorEl.innerHTML = html;
+  editorEl.innerHTML = chtml;
 
-  // Now, insert caret span at the correct place in the DOM
-  placeCaretDOM();
+  // Place caret
+  placeCaret();
+
+  // Update counters + status
+  updateCounts();
+  updateStatus();
+  scheduleAutosave();
 }
 
-/* helper for stable id for nodes */
-function lineId(node){
-  // we use object reference index by walking from head
-  let i = 0, n = lines.head;
-  while (n && n !== node){ i++; n = n.next; }
-  return "L"+i;
-}
+/* stable id by walk */
+function lineId(node){ let idx=0, p=lines.head; while(p && p!==node){ p=p.next; idx++; } return "L"+idx; }
 
-/* split preserving punctuation/spaces so rendered words keep spacing */
-function splitWordsPreserve(s){
-  // split into tokens: words or non-word sequences
-  return s.match(/(\w+|[^\w]+)/g) || [""];
-}
-function escapeHtml(s){
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
-
-/* place a blinking caret span at the cursorIndex inside the curNode line */
-function placeCaretDOM(){
-  // find the line div
-  const id = lineId(curNode);
-  const lineDiv = editorEl.querySelector(`[data-line-id="${id}"]`);
-  if (!lineDiv){
-    // fallback: append caret at end
-    editorEl.focus();
-    return;
-  }
-
-  // create caret span
-  const caret = document.createElement("span");
-  caret.className = "caret";
-  caret.id = "__caret__";
-
-  // Determine where to insert caret: we need to convert curNode.text and cursorIndex into text position among child nodes
-  const fullText = curNode.text;
-  const left = fullText.slice(0, cursorIndex);
-  const right = fullText.slice(cursorIndex);
-
-  // We will set lineDiv.innerHTML = escape(left) + caret + escape(right) but since lineDiv already contains spans for miss, rebuild
-  // Simple approach: clear and set text nodes preserving miss spans lost — easiest is to set lineDiv.innerHTML directly using left+caret+right raw HTML (escaped)
-  lineDiv.innerHTML = escapeHtml(left) + caret.outerHTML + escapeHtml(right);
-
-  // Put selection (focus) on caret so caret appears
-  setSelectionToCaret();
-}
-
-/* Put the real DOM selection around the caret element so user caret appears and keys go to document (we handle keys manually) */
-function setSelectionToCaret(){
-  const caret = document.getElementById("__caret__");
-  if (!caret) return;
+/* Insert caret by reconstructing the current line HTML portion */
+function placeCaret(){
+  const lineDiv = editorEl.querySelector(`[data-id="${lineId(curNode)}"]`);
+  if(!lineDiv) return;
+  const left = curNode.text.slice(0, cursorIndex);
+  const right = curNode.text.slice(cursorIndex);
+  lineDiv.innerHTML = escapeHtml(left) + `<span class="caret" id="__caret__"></span>` + escapeHtml(right);
+  // selection to after caret
   const range = document.createRange();
-  range.setStartAfter(caret); // position caret after the span
-  range.collapse(true);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-  editorEl.focus();
+  const caret = document.getElementById("__caret__");
+  if(!caret) return;
+  range.setStartAfter(caret); range.collapse(true);
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
 }
 
-/* -----------------------
-   Cursor Movement Helpers
-------------------------*/
-function moveCursorLeft(){
-  if (cursorIndex > 0){
-    cursorIndex--;
-  } else if (curNode.prev){
-    curNode = curNode.prev;
-    cursorIndex = curNode.text.length;
-  }
-  render();
+/* Counters */
+function updateCounts(){
+  const text = lines.toArray().join("\n");
+  const words = (text.match(/\b\w+\b/g) || []).length;
+  wcEl.textContent = `Words: ${words}`;
+  ccEl.textContent = `Chars: ${text.length}`;
 }
-function moveCursorRight(){
-  if (cursorIndex < curNode.text.length){
-    cursorIndex++;
-  } else if (curNode.next){
-    curNode = curNode.next;
-    cursorIndex = 0;
-  }
-  render();
-}
-function moveCursorUp(){
-  // move to previous line, keep similar column if possible
-  if (curNode.prev){
-    const col = cursorIndex;
-    curNode = curNode.prev;
-    cursorIndex = Math.min(col, curNode.text.length);
-    render();
-  }
-}
-function moveCursorDown(){
-  if (curNode.next){
-    const col = cursorIndex;
-    curNode = curNode.next;
-    cursorIndex = Math.min(col, curNode.text.length);
-    render();
-  }
+function updateStatus(){
+  // compute current line/column numbers
+  let row = 1, n = lines.head;
+  while(n && n!==curNode){ row++; n=n.next; }
+  const col = cursorIndex + 1;
+  posEl.textContent = `Ln ${row}, Col ${col}`;
 }
 
-/* -----------------------
-   Editing Ops (we perform changes on lines list and record ops)
-------------------------*/
+/* ------------------------------
+   Movement
+--------------------------------*/
+function moveLeft(){
+  if (cursorIndex>0){ cursorIndex--; }
+  else if (curNode.prev){ curNode=curNode.prev; cursorIndex=curNode.text.length; }
+  render();
+}
+function moveRight(){
+  if (cursorIndex<curNode.text.length){ cursorIndex++; }
+  else if (curNode.next){ curNode=curNode.next; cursorIndex=0; }
+  render();
+}
+function moveUp(){
+  if (!curNode.prev) return;
+  const col = cursorIndex;
+  curNode=curNode.prev; cursorIndex=Math.min(col, curNode.text.length);
+  render();
+}
+function moveDown(){
+  if (!curNode.next) return;
+  const col = cursorIndex;
+  curNode=curNode.next; cursorIndex=Math.min(col, curNode.text.length);
+  render();
+}
+
+/* ------------------------------
+   Edits
+--------------------------------*/
 function insertChar(ch){
-  // insert character ch at cursorIndex in current line
   const before = curNode.text;
   curNode.text = before.slice(0, cursorIndex) + ch + before.slice(cursorIndex);
-  const op = { type: "insert", ch: ch, node: curNode, index: cursorIndex };
-  pushUndo(op);
+  pushUndo({type:"insert", node:curNode, index:cursorIndex, text:ch});
   cursorIndex += ch.length;
-  render();
+  render(); showSuggestions();
 }
-
-function deleteBackward(){
-  // Backspace behavior
-  if (cursorIndex > 0){
+function backspace(){
+  if (cursorIndex>0){
     const before = curNode.text;
     const removed = before[cursorIndex-1];
     curNode.text = before.slice(0, cursorIndex-1) + before.slice(cursorIndex);
-    const op = { type: "del", ch: removed, node: curNode, index: cursorIndex-1 };
-    pushUndo(op);
+    pushUndo({type:"del", node:curNode, index:cursorIndex-1, text:removed});
     cursorIndex--;
     render();
-  } else {
-    // if at start of line and prev exists => join lines
-    if (curNode.prev){
-      const prev = curNode.prev;
-      const oldPrevText = prev.text;
-      const oldCurText = curNode.text;
-      const prevLen = prev.text.length;
-      // op include nodes and texts so undo can split again
-      const op = { type: "join", prevNode: prev, curNode: curNode, prevText: oldPrevText, curText: oldCurText };
-      pushUndo(op);
-      // join text and delete curNode
-      prev.text = prev.text + curNode.text;
-      lines.deleteNode(curNode);
-      curNode = prev;
-      cursorIndex = prevLen;
-      render();
-    }
+  } else if (curNode.prev){
+    // join with previous
+    const prev=curNode.prev, oldPrev=prev.text, oldCur=curNode.text, joinAt=prev.text.length;
+    pushUndo({type:"join", prev, cur:curNode, oldPrev, oldCur, joinAt});
+    prev.text = prev.text + curNode.text;
+    lines.deleteNode(curNode);
+    curNode = prev; cursorIndex = joinAt;
+    render();
   }
 }
-
-function insertLineBreak(){
-  // Split current line at cursorIndex into two nodes
-  const before = curNode.text.slice(0, cursorIndex);
-  const after = curNode.text.slice(cursorIndex);
-  const newNode = new LineNode(after);
-  const op = { type: "split", node: curNode, beforeText: curNode.text, newText: after, index: cursorIndex };
-  pushUndo(op);
-  curNode.text = before;
+function newline(){
+  const left = curNode.text.slice(0, cursorIndex);
+  const right = curNode.text.slice(cursorIndex);
+  const newNode = new LineNode(right);
+  pushUndo({type:"split", node:curNode, oldText:curNode.text, index:cursorIndex});
+  curNode.text = left;
   lines.insertAfter(curNode, newNode);
-  curNode = newNode;
-  cursorIndex = 0;
+  curNode = newNode; cursorIndex=0;
   render();
 }
 
-/* Undo / Redo handling */
+/* Undo / Redo */
 function undo(){
-  if (undoStack.length === 0) return;
-  const op = undoStack.pop();
-  redoStack.push(op);
-  // apply inverse
-  if (op.type === "insert"){
-    // remove inserted char
-    const node = op.node;
-    node.text = node.text.slice(0, op.index) + node.text.slice(op.index + op.ch.length);
-    curNode = node;
-    cursorIndex = op.index;
-  } else if (op.type === "del"){
-    // re-insert deleted char
-    const node = op.node;
-    node.text = node.text.slice(0, op.index) + op.ch + node.text.slice(op.index);
-    curNode = node;
-    cursorIndex = op.index + 1;
-  } else if (op.type === "split"){
-    // we had split node into node + newNode: so we must join back and restore text
-    const node = op.node;
-    const next = node.next;
-    if (next){
-      node.text = op.beforeText;
-      lines.deleteNode(next);
-      curNode = node;
-      cursorIndex = op.index;
-    }
-  } else if (op.type === "join"){
-    // we had joined prev & cur by removing cur; re-create cur node
-    const prev = op.prevNode;
-    const curText = op.curText;
-    const restored = new LineNode(curText);
-    // insert after prev
-    if (prev.next) {
-      // Insert between prev and prev.next
-      restored.next = prev.next;
-      prev.next.prev = restored;
-    } else {
-      lines.tail = restored;
-    }
-    prev.next = restored;
-    restored.prev = prev;
-    restored.next = op.prevNext || restored.next; // not necessary
-    prev.text = op.prevText;
-    curNode = restored;
-    cursorIndex = 0;
+  if(!undoStack.length) return;
+  const op = undoStack.pop(); redoStack.push(op);
+  if(op.type==="insert"){
+    op.node.text = op.node.text.slice(0, op.index) + op.node.text.slice(op.index + op.text.length);
+    curNode=op.node; cursorIndex=op.index;
+  } else if(op.type==="del"){
+    op.node.text = op.node.text.slice(0, op.index) + op.text + op.node.text.slice(op.index);
+    curNode=op.node; cursorIndex=op.index+1;
+  } else if(op.type==="split"){
+    const node = op.node, next=node.next;
+    if(next){ node.text = op.oldText; lines.deleteNode(next); curNode=node; cursorIndex=op.index; }
+  } else if(op.type==="join"){
+    const {prev, cur, oldPrev, oldCur, joinAt} = op;
+    // restore separate lines
+    const restored = new LineNode(oldCur);
+    restored.next = prev.next; if(prev.next) prev.next.prev = restored;
+    prev.next = restored; restored.prev = prev;
+    if(lines.tail===prev) lines.tail = restored;
+    prev.text = oldPrev;
+    curNode = restored; cursorIndex = 0;
   }
-  updateButtons();
-  render();
+  updateButtons(); render();
 }
-
 function redo(){
-  if (redoStack.length === 0) return;
-  const op = redoStack.pop();
-  // reapply op (same as performing it originally)
-  if (op.type === "insert"){
-    op.node.text = op.node.text.slice(0, op.index) + op.ch + op.node.text.slice(op.index);
-    curNode = op.node;
-    cursorIndex = op.index + op.ch.length;
-  } else if (op.type === "del"){
-    op.node.text = op.node.text.slice(0, op.index) + op.node.text.slice(op.index + op.ch.length);
-    curNode = op.node;
-    cursorIndex = op.index;
-  } else if (op.type === "split"){
-    // split node again
+  if(!redoStack.length) return;
+  const op = redoStack.pop(); undoStack.push(op);
+  if(op.type==="insert"){
+    op.node.text = op.node.text.slice(0, op.index) + op.text + op.node.text.slice(op.index);
+    curNode=op.node; cursorIndex=op.index+op.text.length;
+  } else if(op.type==="del"){
+    op.node.text = op.node.text.slice(0, op.index) + op.node.text.slice(op.index + op.text.length);
+    curNode=op.node; cursorIndex=op.index;
+  } else if(op.type==="split"){
     const node = op.node;
-    const after = node.text.slice(op.index);
-    const newNode = new LineNode(after);
+    const right = node.text.slice(op.index);
+    const newNode = new LineNode(right);
     node.text = node.text.slice(0, op.index);
     lines.insertAfter(node, newNode);
-    curNode = newNode;
-    cursorIndex = 0;
-  } else if (op.type === "join"){
-    // join prev and cur again
-    const prev = op.prevNode;
-    const cur = prev.next;
-    if (cur){
-      prev.text = prev.text + cur.text;
-      lines.deleteNode(cur);
-      curNode = prev;
-      cursorIndex = prev.text.length - (op.curText?op.curText.length:0);
-    }
+    curNode=newNode; cursorIndex=0;
+  } else if(op.type==="join"){
+    const prev = op.prev, cur = prev.next;
+    if(cur){ prev.text = prev.text + cur.text; lines.deleteNode(cur); curNode=prev; cursorIndex=op.joinAt; }
   }
-  undoStack.push(op);
-  updateButtons();
-  render();
+  updateButtons(); render();
 }
-undoBtn.addEventListener("click", undo);
-redoBtn.addEventListener("click", redo);
 
-/* -----------------------
-   Keyboard Handling
-   We'll prevent default text insertion and do operations ourselves so model stays authoritative
-------------------------*/
-editorEl.addEventListener("keydown", (ev) => {
-  // allow Ctrl/Meta combos for undo/redo native too
-  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') {
-    ev.preventDefault();
-    undo();
-    return;
-  }
-  if ((ev.ctrlKey || ev.metaKey) && (ev.key.toLowerCase() === 'y')) {
-    ev.preventDefault();
-    redo();
-    return;
-  }
-
-  switch(ev.key){
-    case "ArrowLeft":
-      ev.preventDefault();
-      moveCursorLeft();
-      break;
-    case "ArrowRight":
-      ev.preventDefault();
-      moveCursorRight();
-      break;
-    case "ArrowUp":
-      ev.preventDefault();
-      moveCursorUp();
-      break;
-    case "ArrowDown":
-      ev.preventDefault();
-      moveCursorDown();
-      break;
-    case "Backspace":
-      ev.preventDefault();
-      deleteBackward();
-      break;
-    case "Enter":
-      ev.preventDefault();
-      insertLineBreak();
-      break;
-    case "Tab":
-      ev.preventDefault();
-      insertChar("  "); // two spaces
-      break;
-    default:
-      // printable characters: simple check
-      if (ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey){
-        ev.preventDefault();
-        insertChar(ev.key);
-        showSuggestionsForCurrentWord();
-      }
-      break;
-  }
-});
-
-/* click to set caret to clicked position (we compute approximate position by mapping click Y to line and X to char index) */
-editorEl.addEventListener("click", (ev) => {
-  // find clicked line and approximate index
-  const rect = editorEl.getBoundingClientRect();
-  const y = ev.clientY - rect.top;
-  const lineHeight = 20; // approx; we could compute from font metrics
-  const idx = Math.floor(y / lineHeight);
-  // find line node at idx
-  let n = lines.head; let i=0;
-  while (n && i < idx){ n = n.next; i++; }
-  if (!n) n = lines.tail;
-  curNode = n;
-  // approximate char index by measuring text width — fallback estimate: divide by avg char width
-  const avgCharWidth = 8.8;
-  const x = ev.clientX - rect.left - 8; // small padding
-  const approxIndex = Math.max(0, Math.min(n.text.length, Math.round(x / avgCharWidth)));
-  cursorIndex = approxIndex;
-  render();
-});
-
-/* -----------------------
-   Suggestions (autocomplete/spell)
-------------------------*/
-function getCurrentWord(){
-  const text = curNode.text;
-  // get characters before cursor until non-word
-  const left = text.slice(0, cursorIndex);
+/* ------------------------------
+   Suggestions (Trie)
+--------------------------------*/
+function currentWordBeforeCursor(){
+  const left = curNode.text.slice(0, cursorIndex);
   const m = left.match(/(\w+)$/);
   return m ? m[1] : "";
 }
-function showSuggestionsForCurrentWord(){
-  const word = getCurrentWord();
-  if (!word) { suggestionsEl.classList.add("hidden"); return; }
+let suggestionIndex = -1;
+function showSuggestions(){
+  const word = currentWordBeforeCursor();
+  if(!word){ hideSuggestions(); return; }
   const items = trie.autocomplete(word, 8);
-  if (items.length === 0) {
-    suggestionsEl.classList.add("hidden");
-    return;
-  }
-  suggestionsEl.innerHTML = "";
-  items.forEach(it => {
-    const el = document.createElement("div");
-    el.className = "item";
-    el.textContent = it;
-    el.onclick = () => applySuggestion(it);
-    suggestionsEl.appendChild(el);
-  });
+  if(!items.length){ hideSuggestions(); return; }
+  suggestionsEl.innerHTML = items.map((w,i)=> `<div class="item${i===0?' active':''}" data-v="${w}">${w}</div>`).join("");
+  suggestionIndex = 0;
+  // position dropdown just under editorWrap (simple placement)
+  const wrapRect = document.querySelector('.editor-wrap').getBoundingClientRect();
+  suggestionsEl.style.left = (wrapRect.left + 80) + "px";
+  suggestionsEl.style.top  = (wrapRect.bottom - 4) + "px";
   suggestionsEl.classList.remove("hidden");
 }
+function hideSuggestions(){ suggestionsEl.classList.add("hidden"); suggestionIndex=-1; }
+suggestionsEl.addEventListener("click", (e)=>{
+  const el = e.target.closest(".item"); if(!el) return;
+  applySuggestion(el.dataset.v);
+});
 function applySuggestion(word){
-  // replace current word before cursor with word
   const cur = curNode.text;
   const left = cur.slice(0, cursorIndex);
   const right = cur.slice(cursorIndex);
   const m = left.match(/(\w+)$/);
   const start = m ? (cursorIndex - m[1].length) : cursorIndex;
   curNode.text = cur.slice(0, start) + word + right;
+  pushUndo({type:"insert", node:curNode, index:start, text:word});
   cursorIndex = start + word.length;
-  suggestionsEl.classList.add("hidden");
-  pushUndo({ type:"insert", ch: word, node: curNode, index: start });
+  hideSuggestions(); render();
+}
+
+/* Keyboard navigation inside suggestions */
+function moveSuggestion(delta){
+  if(suggestionsEl.classList.contains("hidden")) return;
+  const items = [...suggestionsEl.querySelectorAll(".item")];
+  if(!items.length) return;
+  suggestionIndex = (suggestionIndex + delta + items.length) % items.length;
+  items.forEach((el,i)=> el.classList.toggle("active", i===suggestionIndex));
+}
+function acceptSuggestion(){
+  if(suggestionsEl.classList.contains("hidden")) return;
+  const items = [...suggestionsEl.querySelectorAll(".item")];
+  if(items[suggestionIndex]) applySuggestion(items[suggestionIndex].dataset.v);
+}
+
+/* ------------------------------
+   Keyboard handling
+--------------------------------*/
+editorEl.addEventListener("keydown", (ev)=>{
+  // Global combos
+  if((ev.ctrlKey||ev.metaKey) && ev.key.toLowerCase()==='z'){ ev.preventDefault(); undo(); return; }
+  if((ev.ctrlKey||ev.metaKey) && ev.key.toLowerCase()==='y'){ ev.preventDefault(); redo(); return; }
+  if((ev.ctrlKey||ev.metaKey) && ev.key.toLowerCase()==='f'){ ev.preventDefault(); toggleFind(true); return; }
+
+  switch(ev.key){
+    case "ArrowLeft":   ev.preventDefault(); moveLeft(); break;
+    case "ArrowRight":  ev.preventDefault(); moveRight(); break;
+    case "ArrowUp":     if(!suggestionsEl.classList.contains("hidden")){ ev.preventDefault(); moveSuggestion(-1); } else { ev.preventDefault(); moveUp(); } break;
+    case "ArrowDown":   if(!suggestionsEl.classList.contains("hidden")){ ev.preventDefault(); moveSuggestion(+1); } else { ev.preventDefault(); moveDown(); } break;
+    case "Enter":       if(!suggestionsEl.classList.contains("hidden")){ ev.preventDefault(); acceptSuggestion(); } else { ev.preventDefault(); newline(); } break;
+    case "Backspace":   ev.preventDefault(); backspace(); break;
+    case "Escape":      hideSuggestions(); break;
+    case "Tab":         ev.preventDefault(); insertChar("  "); break;
+    default:
+      if(ev.key.length===1 && !ev.ctrlKey && !ev.metaKey){
+        ev.preventDefault();
+        insertChar(ev.key);
+      }
+  }
+});
+
+/* Click to move caret approximately to position */
+editorEl.addEventListener("click", (ev)=>{
+  const rect = editorEl.getBoundingClientRect();
+  const y = ev.clientY - rect.top;
+  const lineHeight = 25; // approx for monospace 15px + padding
+  const targetRow = Math.max(0, Math.floor(y / lineHeight));
+  // map to node
+  let n=lines.head, i=0; while(n && i<targetRow){ n=n.next; i++; }
+  if(!n) n=lines.tail;
+  curNode = n;
+  // rough X -> index
+  const avgChar = 8.5;
+  const x = Math.max(0, ev.clientX - rect.left - 12);
+  cursorIndex = Math.max(0, Math.min(curNode.text.length, Math.round(x/avgChar)));
   render();
-}
+});
 
-/* -----------------------
-   Utilities: escape, save
-------------------------*/
-function escapeHtmlForText(s){
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+/* ------------------------------
+   Find & Replace
+--------------------------------*/
+function toggleFind(open){
+  if(typeof open==="boolean"){
+    findPanel.classList.toggle("hidden", !open);
+  } else {
+    findPanel.classList.toggle("hidden");
+  }
+  if(!findPanel.classList.contains("hidden")) findInput.focus();
 }
+findToggle.addEventListener("click", ()=> toggleFind());
 
-/* download file */
-saveBtn.addEventListener("click", () => {
-  const arr = lines.toArray();
-  const txt = arr.join("\n");
-  const blob = new Blob([txt], {type: "text/plain"});
+findNextBtn.addEventListener("click", ()=>{
+  const q = findInput.value;
+  if(!q) return;
+  // linear scan from current line/index
+  let n = curNode, idx = cursorIndex;
+  // search current line right
+  let pos = n.text.indexOf(q, idx);
+  if(pos !== -1){ curNode=n; cursorIndex=pos; render(); return; }
+  // else next lines
+  n = n.next;
+  while(n){ pos = n.text.indexOf(q); if(pos!==-1){ curNode=n; cursorIndex=pos; render(); return; } n=n.next; }
+  // wrap to start
+  n = lines.head;
+  while(n){ pos = n.text.indexOf(q); if(pos!==-1){ curNode=n; cursorIndex=pos; render(); return; } n=n.next; }
+});
+
+replaceBtn.addEventListener("click", ()=>{
+  const q = findInput.value, r = replaceInput.value ?? "";
+  if(!q) return;
+  if(curNode.text.slice(cursorIndex, cursorIndex+q.length) === q){
+    curNode.text = curNode.text.slice(0,cursorIndex) + r + curNode.text.slice(cursorIndex+q.length);
+    pushUndo({type:"insert", node:curNode, index:cursorIndex, text:r}); // simple op record
+    cursorIndex += r.length;
+    render();
+  } else {
+    // find next then replace
+    findNextBtn.click();
+  }
+});
+replaceAllBtn.addEventListener("click", ()=>{
+  const q = findInput.value, r = replaceInput.value ?? "";
+  if(!q) return;
+  let n = lines.head;
+  while(n){
+    if(n.text.includes(q)){
+      n.text = n.text.split(q).join(r);
+    }
+    n = n.next;
+  }
+  render();
+});
+
+/* ------------------------------
+   Saving / Printing / Clearing / Theme
+--------------------------------*/
+saveBtn.addEventListener("click", ()=>{
+  const txt = lines.toArray().join("\n");
+  const blob = new Blob([txt], {type:"text/plain"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "text_editor_output.txt";
   a.click();
 });
-
-/* small helper: if user clicks outside suggestions, hide */
-document.addEventListener("click", (ev) => {
-  if (!suggestionsEl.contains(ev.target) && !editorEl.contains(ev.target)) suggestionsEl.classList.add("hidden");
+printBtn.addEventListener("click", ()=> window.print());
+clearBtn.addEventListener("click", ()=>{
+  lines = new LineList(); curNode = lines.head; cursorIndex=0; undoStack=[]; redoStack=[]; render();
+});
+themeBtn.addEventListener("click", ()=>{
+  const isDark = bodyEl.classList.contains("dark");
+  bodyEl.classList.toggle("dark", !isDark);
+  bodyEl.classList.toggle("light", isDark);
 });
 
-/* -----------------------
-   Initialization
-------------------------*/
+/* ------------------------------
+   Autosave (localStorage)
+--------------------------------*/
+let autosaveTimer=null;
+function scheduleAutosave(){
+  if(autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(()=>{
+    try{
+      const txt = lines.toArray().join("\n");
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({txt}));
+      autosaveEl.textContent = "Autosaved";
+      setTimeout(()=> autosaveEl.textContent=" ", 1200);
+    }catch(e){}
+  }, 350);
+}
+
+/* ------------------------------
+   Initialization: load from storage if exists
+--------------------------------*/
+function loadFromStorage(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    const {txt} = JSON.parse(raw);
+    if(typeof txt !== "string") return;
+    // build lines
+    lines = new LineList();
+    const parts = txt.split("\n");
+    lines.head.text = parts[0] ?? "";
+    let cur = lines.head;
+    for(let i=1;i<parts.length;i++){
+      const n = new LineNode(parts[i]);
+      lines.insertAfter(cur, n);
+      cur = n;
+    }
+    curNode = lines.head; cursorIndex = 0;
+  }catch(e){}
+}
+
 function init(){
-  // seed lines with one empty line
-  lines = new LineList();
-  curNode = lines.head;
-  cursorIndex = 0;
-  undoStack = [];
-  redoStack = [];
+  loadFromStorage();
   updateButtons();
   render();
-  // focus editor for keyboard
   editorEl.focus();
 }
 init();

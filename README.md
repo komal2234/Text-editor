@@ -1,29 +1,32 @@
-# Text Editor (with DSA Features)
+# Web Text Editor  
 
-## Project Overview
-This is a **responsive web-based text editor** built using **HTML, CSS, and JavaScript**.  
-The editor integrates **Data Structures & Algorithms (DSA)** concepts to make text manipulation efficient and interactive.
+A **feature-rich web-based text editor** built using **HTML, CSS, and JavaScript**, designed with a modern UI inspired by VS Code.  
+This project was created as part of a course project under **Prof. Nitin Saxena (ESO207, Mar–Apr 2024)**.  
 
-## Features
--  **Text Editing**
-  - Insert, delete, and modify text efficiently  
-  - Implemented using **Doubly Linked List** for smooth manipulation  
+---
 
-- **Undo & Redo**
-  - Implemented with **Stacks** for quick action reversal  
+##  Features  
 
--  **Spell Check & Autocomplete**
-  - Powered by **Trie Data Structure**  
-  - Provides fast word suggestions and corrections  
+ **Responsive Text Editing** – Clean editor with line numbers, cursor navigation, and smooth typing experience.  
+ **Undo / Redo Support** – Implemented using **Stack** data structure.  
+ **Text Editing with Doubly Linked List** – Efficient manipulation and line insertion.  
+ **Autocomplete & Spell Check** – Uses **Trie data structure** for dictionary-based word suggestions.  
+ **Live Word & Character Count** – Updates in real time as you type.  
+ **Highlight Misspelled Words** – Red underline for incorrect words (checked against dictionary).  
+ **Dark / Light Mode Toggle 🌙☀️** – Switch themes with one click.  
+ **Find & Replace Tool 🔍** – Search text and replace instantly.  
+ **Export Options** – Download your notes as `.txt` or `.pdf`.  
+ **Resizable Editor Area** – Drag to resize the text editor.  
+ **Save Drafts (LocalStorage)** – Keeps your text safe even after page refresh.  
+ **Improved Suggestions UI** – Styled dropdown for word recommendations.  
+ **Line Numbers** – Just like in VS Code.  
+ **Modern UI Enhancements**  
+   - Glassmorphism / Card-style editor box ✨  
+   - Animated hover-glow buttons 🎇  
+   - Sticky toolbar with smooth transitions  
+   - Developer fonts → **Fira Code** / **JetBrains Mono**  
 
-- **Keyboard & Cursor Navigation**
-  - Move through text easily with arrow keys and shortcuts  
+---
 
-   **Responsive UI**
-  - Works smoothly on both desktop and mobile browsers  
-
-##  Tech Stack
-- **Frontend:** HTML, CSS, JavaScript  
-- **Algorithms & Data Structures:** Trie, Stack, Doubly Linked List  
-
+## 📂 Project Structure  
 

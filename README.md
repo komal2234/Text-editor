@@ -1,9 +1,7 @@
 # Web Text Editor  
 
-A **feature-rich web-based text editor** built using **HTML, CSS, and JavaScript**, designed with a modern UI inspired by VS Code.  
-This project was created as part of a course project under **Prof. Nitin Saxena (ESO207, Mar–Apr 2024)**.  
 
----
+
 
 ##  Features  
 
@@ -13,7 +11,7 @@ This project was created as part of a course project under **Prof. Nitin Saxena 
  **Autocomplete & Spell Check** – Uses **Trie data structure** for dictionary-based word suggestions.  
  **Live Word & Character Count** – Updates in real time as you type.  
  **Highlight Misspelled Words** – Red underline for incorrect words (checked against dictionary).  
- **Dark / Light Mode Toggle 🌙☀️** – Switch themes with one click.  
+ **Dark / Light Mode Toggle – Switch themes with one click.  
  **Find & Replace Tool 🔍** – Search text and replace instantly.  
  **Export Options** – Download your notes as `.txt` or `.pdf`.  
  **Resizable Editor Area** – Drag to resize the text editor.  
@@ -21,12 +19,11 @@ This project was created as part of a course project under **Prof. Nitin Saxena 
  **Improved Suggestions UI** – Styled dropdown for word recommendations.  
  **Line Numbers** – Just like in VS Code.  
  **Modern UI Enhancements**  
-   - Glassmorphism / Card-style editor box ✨  
-   - Animated hover-glow buttons 🎇  
+   - Glassmorphism / Card-style editor box 
+   - Animated hover-glow buttons 
    - Sticky toolbar with smooth transitions  
    - Developer fonts → **Fira Code** / **JetBrains Mono**  
 
 ---
 
-## 📂 Project Structure  
 
